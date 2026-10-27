@@ -19,9 +19,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+      - run: pip install -e ".[dev]" -r requirements.txt
       - name: pip-audit (installed runtime + dev deps)
         run: pip-audit --skip-editable
       - name: Bandit
-        run: bandit -c pyproject.toml -r extraction evaluation
+        run: bandit -c pyproject.toml -r extraction

@@ -44,7 +44,12 @@ def review_fields_from_rules(
     confidential = confidential_fields or set()
     review_fields = {}
 
+    document_config = RulesEngineConfig().get_document_config(rules_payload.get("document_type", "generic"))
+    required = set(document_config.required_fields)
     for field_name, details in rules_payload["fields"].items():
+        absent = details.get("ocr_value") in (None, "") and details.get("ai_value") in (None, "")
+        if absent and field_name not in required:
+            continue  # optional and not printed on the document: nothing to review
         validation_status = details.get("validation_status", "not_checkable")
         decision = details.get("decision", "human_review")
         issues = []
@@ -70,7 +75,6 @@ def review_fields_from_rules(
             "evidence_sufficient": details.get("evidence_sufficient", False),
         }
 
-    document_config = RulesEngineConfig().get_document_config(rules_payload.get("document_type", "generic"))
     for field_name in document_config.required_fields:
         if field_name not in review_fields:
             review_fields[field_name] = {

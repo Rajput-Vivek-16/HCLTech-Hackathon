@@ -27,7 +27,6 @@ import hashlib
 import io
 import os
 from dataclasses import dataclass, field
-from typing import List
 
 import cv2  # required: blur and skew checks are calibrated for OpenCV
 import numpy as np
@@ -45,17 +44,17 @@ ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 DEFAULT_MAX_SIZE_MB = 20
 DEFAULT_LONG_EDGE = 1920
 MAX_PDF_PAGES = 5
-MAX_IMAGE_PIXELS = 50_000_000          # guards against decompression bombs
+MAX_IMAGE_PIXELS = 50_000_000  # guards against decompression bombs
 PDF_MIME_TYPE = "application/pdf"
 IMAGE_MIME_TYPE = "image/png"
-BLUR_THRESHOLD = 80.0                  # Laplacian variance; starting guess, tune on samples
-MIN_IMAGE_DIMENSION = 600              # px, shorter side
-MAX_SKEW_DEGREES = 15.0                # ignore larger angles (likely not skew)
-MIN_SKEW_DEGREES = 0.3                 # ignore tiny angles
-NOISE_SIGMA_THRESHOLD = 2.5            # estimated noise std (0-255); starting guess, tune
-OSD_MIN_CONFIDENCE = 2.0               # Tesseract orientation_conf needed to rotate
-OSD_MAX_EDGE = 1200                    # shrink before OSD for speed
-VALID_ROTATIONS = (0, 90, 180, 270)    # clockwise degrees
+BLUR_THRESHOLD = 80.0  # Laplacian variance; starting guess, tune on samples
+MIN_IMAGE_DIMENSION = 600  # px, shorter side
+MAX_SKEW_DEGREES = 15.0  # ignore larger angles (likely not skew)
+MIN_SKEW_DEGREES = 0.3  # ignore tiny angles
+NOISE_SIGMA_THRESHOLD = 2.5  # estimated noise std (0-255); starting guess, tune
+OSD_MIN_CONFIDENCE = 2.0  # Tesseract orientation_conf needed to rotate
+OSD_MAX_EDGE = 1200  # shrink before OSD for speed
+VALID_ROTATIONS = (0, 90, 180, 270)  # clockwise degrees
 
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
@@ -79,13 +78,13 @@ class PageResult:
     processed_image: Image.Image
     width: int
     height: int
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     deskew_angle: float = 0.0
     sharpness: float = 0.0
     noise_sigma: float = 0.0
     denoised: bool = False
-    rotation_applied: int = 0          # clockwise degrees
-    orientation_method: str = "none"   # none | manual | tesseract-osd | unavailable
+    rotation_applied: int = 0  # clockwise degrees
+    orientation_method: str = "none"  # none | manual | tesseract-osd | unavailable
 
     def processed_bytes(self, fmt: str = "PNG") -> bytes:
         """Return the prepared image encoded for OCR."""
@@ -106,9 +105,9 @@ class PreparedDocument:
     file_size: int
     extension: str
     page_count: int
-    pages: List[PageResult] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    notes: List[str] = field(default_factory=list)
+    pages: list[PageResult] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
 
     @property
@@ -170,15 +169,12 @@ def _validate_file(file_bytes: bytes, filename: str, max_size_mb: float) -> str:
 
     size_mb = len(file_bytes) / (1024 * 1024)
     if size_mb > max_size_mb:
-        raise ValueError(
-            f"File is {size_mb:.1f} MB, which exceeds the {max_size_mb:g} MB limit."
-        )
+        raise ValueError(f"File is {size_mb:.1f} MB, which exceeds the {max_size_mb:g} MB limit.")
 
     # Magic bytes: the content must match the claimed extension.
     if not file_bytes.startswith(_MAGIC[extension]):
         raise ValueError(
-            f"File content does not look like a valid '{extension}' file "
-            "(extension and content do not match)."
+            f"File content does not look like a valid '{extension}' file (extension and content do not match)."
         )
     return extension
 
@@ -192,18 +188,14 @@ def _open_pdf(file_bytes: bytes):
 
     if document.needs_pass or document.is_encrypted:
         document.close()
-        raise ValueError(
-            "PDF is password-protected. Please upload an unlocked copy."
-        )
+        raise ValueError("PDF is password-protected. Please upload an unlocked copy.")
     if document.page_count == 0:
         document.close()
         raise ValueError("PDF has zero pages.")
     if document.page_count > MAX_PDF_PAGES:
         count = document.page_count
         document.close()
-        raise ValueError(
-            f"PDF has {count} pages; the limit is {MAX_PDF_PAGES}."
-        )
+        raise ValueError(f"PDF has {count} pages; the limit is {MAX_PDF_PAGES}.")
     return document
 
 
@@ -213,9 +205,7 @@ def _open_image(file_bytes: bytes) -> Image.Image:
         with Image.open(io.BytesIO(file_bytes)) as image:
             image.load()
             image = ImageOps.exif_transpose(image)  # fixes sideways phone photos
-            if image.mode in ("RGBA", "LA") or (
-                image.mode == "P" and "transparency" in image.info
-            ):
+            if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
                 rgba = image.convert("RGBA")
                 background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
                 background.alpha_composite(rgba)
@@ -238,9 +228,7 @@ def _resize(image: Image.Image, long_edge: int) -> Image.Image:
     if longest <= long_edge:
         return image.copy()
     scale = long_edge / longest
-    return image.resize(
-        (round(width * scale), round(height * scale)), Image.Resampling.LANCZOS
-    )
+    return image.resize((round(width * scale), round(height * scale)), Image.Resampling.LANCZOS)
 
 
 def _sharpness(image: Image.Image) -> float:
@@ -256,9 +244,7 @@ def _quality_warnings(image: Image.Image) -> tuple[list[str], float]:
         warnings.append(f"Image may be blurry (sharpness score {score:.1f}).")
     width, height = image.size
     if min(width, height) < MIN_IMAGE_DIMENSION:
-        warnings.append(
-            f"Low resolution ({width}x{height}); OCR accuracy may be reduced."
-        )
+        warnings.append(f"Low resolution ({width}x{height}); OCR accuracy may be reduced.")
     return warnings, score
 
 
@@ -292,9 +278,7 @@ def _deskew(image: Image.Image, angle: float) -> Image.Image:
         return image
     # PIL rotates counter-clockwise for positive angles; a line sloping
     # down-right (positive angle in image coordinates) needs that rotation.
-    return image.rotate(
-        angle, resample=Image.Resampling.BICUBIC, expand=True, fillcolor="white"
-    )
+    return image.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True, fillcolor="white")
 
 
 def _estimate_noise_sigma(image: Image.Image) -> float:
@@ -328,7 +312,7 @@ def _rotate_cw(image: Image.Image, degrees: int) -> Image.Image:
     if degrees == 0:
         return image
     transposes = {
-        90: Image.Transpose.ROTATE_270,   # PIL's ROTATE_n is counter-clockwise
+        90: Image.Transpose.ROTATE_270,  # PIL's ROTATE_n is counter-clockwise
         180: Image.Transpose.ROTATE_180,
         270: Image.Transpose.ROTATE_90,
     }
@@ -344,9 +328,7 @@ def _osd_rotation(image: Image.Image) -> tuple[int | None, float]:
     small = image.copy()
     small.thumbnail((OSD_MAX_EDGE, OSD_MAX_EDGE))
     try:
-        osd = pytesseract.image_to_osd(
-            small, config="--psm 0", output_type=pytesseract.Output.DICT
-        )
+        osd = pytesseract.image_to_osd(small, config="--psm 0", output_type=pytesseract.Output.DICT)
         return int(osd["rotate"]), float(osd["orientation_conf"])
     except Exception:  # binary missing, too little text, etc.
         return None, 0.0
@@ -365,14 +347,14 @@ def _auto_orient(image: Image.Image) -> tuple[Image.Image, int, str]:
 # ---------------------------------------------------------------------------
 # PDF preview (display only)
 # ---------------------------------------------------------------------------
-def render_pdf_preview(pdf_bytes: bytes, dpi: int = 110) -> List[Image.Image]:
+def render_pdf_preview(pdf_bytes: bytes, dpi: int = 110) -> list[Image.Image]:
     """Render PDF pages to images so the UI can SHOW them.
 
     Preview only: these images are never sent to OCR. The OCR hand-off still
     uses the untouched PDF bytes (``PreparedDocument.ocr_bytes``).
     """
     document = _open_pdf(pdf_bytes)  # re-validates: encrypted / corrupt / too long
-    images: List[Image.Image] = []
+    images: list[Image.Image] = []
     try:
         zoom = dpi / 72.0
         matrix = fitz.Matrix(zoom, zoom)

@@ -145,6 +145,7 @@ def test_transparent_png_not_black():
 
 def test_pdf_preview_renders_pages_without_touching_ocr_bytes():
     from preprocess import render_pdf_preview
+
     raw = _pdf_bytes(pages=2)
     imgs = render_pdf_preview(raw)
     assert len(imgs) == 2
@@ -155,6 +156,7 @@ def test_pdf_preview_renders_pages_without_touching_ocr_bytes():
 
 def test_pdf_preview_rejects_encrypted():
     from preprocess import render_pdf_preview
+
     with pytest.raises(ValueError):
         render_pdf_preview(_pdf_bytes(password="secret"))
 
@@ -162,12 +164,22 @@ def test_pdf_preview_rejects_encrypted():
 # ---------------------------------------------------------------- new: noise / orientation
 def _real_text_page(w=1000, h=1400):
     from PIL import ImageFont
+
     img = Image.new("RGB", (w, h), (235, 235, 235))
     d = ImageDraw.Draw(img)
     font = ImageFont.load_default(size=30)
-    lines = ["TAX INVOICE", "ABC TRADING SDN BHD", "Invoice No: INV-20418", "Date: 14/03/2018",
-             "Item A 2 x 5.00 10.00", "Item B 1 x 10.00 10.00", "Subtotal 20.00",
-             "GST 6% 1.20", "TOTAL RM 21.20", "Thank you for shopping"] * 3
+    lines = [
+        "TAX INVOICE",
+        "ABC TRADING SDN BHD",
+        "Invoice No: INV-20418",
+        "Date: 14/03/2018",
+        "Item A 2 x 5.00 10.00",
+        "Item B 1 x 10.00 10.00",
+        "Subtotal 20.00",
+        "GST 6% 1.20",
+        "TOTAL RM 21.20",
+        "Thank you for shopping",
+    ] * 3
     for i, line in enumerate(lines):
         d.text((80, 80 + i * 40), line, fill="black", font=font)
     return img
@@ -180,7 +192,8 @@ def _add_noise(img, sigma, seed=0):
 
 
 def test_noise_estimator_separates_clean_and_noisy():
-    from preprocess import _estimate_noise_sigma, NOISE_SIGMA_THRESHOLD
+    from preprocess import NOISE_SIGMA_THRESHOLD, _estimate_noise_sigma
+
     page = _real_text_page()
     assert _estimate_noise_sigma(page) < NOISE_SIGMA_THRESHOLD
     assert _estimate_noise_sigma(_add_noise(page, 12)) > NOISE_SIGMA_THRESHOLD
@@ -188,6 +201,7 @@ def test_noise_estimator_separates_clean_and_noisy():
 
 def test_noisy_image_is_denoised_and_clean_one_is_not():
     from preprocess import _estimate_noise_sigma
+
     page = _real_text_page()
     noisy = process_upload(_png_bytes(_add_noise(page, 12)), "n.png", deskew=False, auto_orient=False)
     clean = process_upload(_png_bytes(page), "c.png", deskew=False, auto_orient=False)
@@ -207,8 +221,8 @@ def test_manual_rotation_is_clockwise():
     ImageDraw.Draw(img).rectangle([0, 0, 100, 100], fill=(255, 0, 0))  # red, top-left
     doc = process_upload(_png_bytes(img), "m.png", auto_orient=False, deskew=False, manual_rotation=90)
     out = np.asarray(doc.pages[0].processed_image)
-    assert out.shape[:2] == (800, 1000)                       # width/height swapped
-    assert tuple(out[10, -10]) == (255, 0, 0)                 # red moved to top-right
+    assert out.shape[:2] == (800, 1000)  # width/height swapped
+    assert tuple(out[10, -10]) == (255, 0, 0)  # red moved to top-right
     assert doc.pages[0].rotation_applied == 90 and doc.pages[0].orientation_method == "manual"
 
 

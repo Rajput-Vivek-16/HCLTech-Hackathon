@@ -20,6 +20,7 @@ Features
 from __future__ import annotations
 
 import html
+import os
 import time
 import uuid
 
@@ -52,7 +53,7 @@ def stretch(fn, *args, **kwargs):
     try:
         return fn(*args, width="stretch", **kwargs)
     except Exception:
-        return fn(*args, use_container_width=True, **kwargs)
+        return fn(*args, width="stretch", **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -68,14 +69,41 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 1.6rem; max-width: 1250px; }
+    .block-container { padding-top: 1.4rem; max-width: 1320px; }
     div[data-testid="stMetric"] {
         background: var(--secondary-background-color);
-        border-radius: 10px; padding: 12px 16px;
+        border-radius: 12px; padding: 14px 18px;
+        border: 1px solid rgba(128,128,128,0.18);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
-    .hero { padding: 6px 0 2px 0; }
-    .hero h1 { margin-bottom: 0; }
-    .hero p { opacity: 0.75; margin-top: 4px; }
+    div[data-testid="stMetricValue"] { font-weight: 700; }
+    .hero {
+        padding: 22px 28px; border-radius: 16px; margin-bottom: 14px; color: #fff;
+        background: linear-gradient(120deg, #4f46e5 0%, #7c3aed 45%, #db2777 100%);
+        box-shadow: 0 6px 24px rgba(79,70,229,0.25);
+    }
+    .hero h1 { margin: 0; color: #fff; font-size: 2.1rem; }
+    .hero p { opacity: 0.92; margin: 6px 0 0 0; font-size: 1.02rem; }
+    .hero .badges { margin-top: 12px; }
+    .hero .badge { display: inline-block; padding: 3px 11px; margin-right: 6px; border-radius: 999px;
+                   background: rgba(255,255,255,0.18); font-size: 0.8rem; }
+    .section-title { font-size: 1.35rem; font-weight: 700; margin: 6px 0 10px 0; }
+    .decision { padding: 16px 20px; border-radius: 14px; margin: 8px 0 14px 0;
+                border-left: 6px solid; background: var(--secondary-background-color); }
+    .decision h3 { margin: 0 0 6px 0; }
+    .decision ul { margin: 4px 0 0 18px; padding: 0; font-size: 0.92rem; opacity: 0.9; }
+    .decision.ok   { border-color: #16a34a; }
+    .decision.warn { border-color: #f59e0b; }
+    .decision.bad  { border-color: #dc2626; }
+    .legend span { display: inline-block; margin-right: 14px; font-size: 0.85rem; }
+    .doctype { padding: 14px 20px; border-radius: 14px; margin: 6px 0 4px 0;
+               background: linear-gradient(90deg, rgba(79,70,229,0.12), rgba(219,39,119,0.08));
+               border: 1px solid rgba(79,70,229,0.35); }
+    .doctype-main { font-size: 1.45rem; font-weight: 700; margin-right: 12px; }
+    .doctype-note { font-size: 0.9rem; opacity: 0.8; }
+    .doctype-detail { font-size: 0.85rem; opacity: 0.75; margin-top: 4px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; }
+    .stTabs [data-baseweb="tab"] { border-radius: 8px 8px 0 0; padding: 6px 14px; }
 
     .steps { display: flex; gap: 8px; margin: 10px 0 18px 0; flex-wrap: wrap; }
     .step { flex: 1; min-width: 150px; padding: 10px 14px; border-radius: 10px;
@@ -114,34 +142,71 @@ with st.sidebar:
 
     with st.expander("📁 File limits", expanded=False):
         max_size = st.number_input(
-            "Max file size (MB)", min_value=1, max_value=100,
-            value=DEFAULT_MAX_SIZE_MB, step=1,
+            "Max file size (MB)",
+            min_value=1,
+            max_value=100,
+            value=DEFAULT_MAX_SIZE_MB,
+            step=1,
         )
         st.caption(f"Types: {', '.join(sorted(ALLOWED_EXTENSIONS))} · PDFs up to {MAX_PDF_PAGES} pages")
 
     with st.expander("🖼️ Image cleanup", expanded=True):
         long_edge = st.slider(
-            "Resize long edge (px)", min_value=640, max_value=3840, value=1920, step=64,
+            "Resize long edge (px)",
+            min_value=640,
+            max_value=3840,
+            value=1920,
+            step=64,
         )
         auto_orient = st.checkbox(
-            "Auto-fix page orientation", value=True,
-            help="Uses Tesseract OSD to fix 90/180/270° rotation. "
-                 "If it is unavailable or unsure, nothing is rotated.",
+            "Auto-fix page orientation",
+            value=True,
+            help="Uses Tesseract OSD to fix 90/180/270° rotation. If it is unavailable or unsure, nothing is rotated.",
         )
         rotation_label = st.selectbox(
-            "Manual rotation override", list(ROTATION_CHOICES),
+            "Manual rotation override",
+            list(ROTATION_CHOICES),
             help="Use when a page is still sideways or upside down. Overrides auto-orientation.",
         )
         manual_rotation = ROTATION_CHOICES[rotation_label]
         do_denoise = st.checkbox(
-            "Reduce noise", value=True,
+            "Reduce noise",
+            value=True,
             help="Only applied when noise is detected, so clean scans are left untouched.",
         )
         do_deskew = st.checkbox("Straighten slight tilt (deskew)", value=True)
 
+    with st.expander("🤖 Extraction", expanded=True):
+        use_ocr = st.checkbox("PaddleOCR (text + layout rules)", value=True)
+        use_vlm = st.checkbox(
+            "Qwen2-VL-2B (local vision model)",
+            value=True,
+            help="Runs fully on this machine. On CPU it takes about 1-2 minutes per document.",
+        )
+        doc_type_label = st.selectbox(
+            "Document type",
+            ["Auto-detect", "Receipt / Invoice", "Delivery note", "Form"],
+            help="Auto-detect lets both branches classify the document.",
+        )
+        doc_type_override = {"Receipt / Invoice": "invoice", "Delivery note": "delivery_note", "Form": "form"}.get(
+            doc_type_label
+        )
+        ocr_speed = st.radio(
+            "OCR model",
+            ["Accurate", "Fast"],
+            horizontal=True,
+            help="Fast uses PaddleOCR mobile models: about 2x quicker, slightly less accurate.",
+        )
+        os.environ["OCR_MODEL_SIZE"] = "mobile" if ocr_speed == "Fast" else "server"
+        auto_run = st.toggle("Run automatically on upload", value=True)
+
+    with st.expander("🎨 Display", expanded=False):
+        show_boxes = st.checkbox("Draw OCR evidence boxes on the image", value=True)
+        min_conf = st.slider("Flag fields below confidence", 0.0, 1.0, 0.80, 0.05)
+
     st.divider()
     if st.button("🗑️ Clear processed cache"):
-        for key in ("processed_cache", "review_runs", "timings"):
+        for key in ("processed_cache", "review_runs", "timings", "pipeline_runs", "approved_records"):
             st.session_state[key] = {}
         st.cache_data.clear()
         st.rerun()
@@ -154,17 +219,50 @@ st.markdown(
     <div class="hero">
       <h1>📄 DocExtract</h1>
       <p>Messy documents in, structured fields out. Only the uncertain fields go to a human.</p>
+      <div class="badges">
+        <span class="badge">🧹 Preprocessing</span><span class="badge">🔤 PaddleOCR</span>
+        <span class="badge">👁️ Qwen2-VL (local)</span><span class="badge">✅ Rules engine</span>
+        <span class="badge">🔒 Nothing leaves this machine</span>
+      </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-uploaded_files = st.file_uploader(
-    "Upload document(s)",
-    type=["pdf", "png", "jpg", "jpeg"],
-    accept_multiple_files=True,
-    help="Supported: PDF, PNG, JPG/JPEG. Scans, photos and PDFs all work.",
-)
+st.session_state.setdefault("uploader_key", 0)
+col_upload, col_clear = st.columns([6, 1], vertical_alignment="center")
+with col_upload:
+    uploaded_files = st.file_uploader(
+        "Upload document(s)",
+        type=["pdf", "png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        help="Supported: PDF, PNG, JPG/JPEG. Scans, photos and PDFs all work.",
+        key=f"uploader_{st.session_state.uploader_key}",
+    )
+with col_clear:
+    if st.button("🧹 Clear all", width="stretch", help="Remove all uploads, results and review state"):
+        st.session_state.uploader_key += 1  # a new key gives an empty uploader
+        for key in (
+            "processed_cache",
+            "review_runs",
+            "timings",
+            "pipeline_runs",
+            "approved_records",
+            "document_ids",
+        ):
+            st.session_state[key] = {}
+        for key in (
+            "extraction_result",
+            "document_bytes",
+            "document_type",
+            "document_id",
+            "review_run_id",
+            "ocr_payloads",
+            "_docsense_review_states",
+        ):
+            st.session_state.pop(key, None)
+        st.cache_data.clear()
+        st.rerun()
 
 # ---------------------------------------------------------------------------
 # Session state
@@ -176,23 +274,7 @@ extraction_result = st.session_state.get("extraction_result") or {"fields": {}}
 has_fields = bool(extraction_result.get("fields"))
 
 
-def render_stepper(uploaded: bool, processed: bool) -> None:
-    steps = [
-        ("Step 1", "Upload", "done" if uploaded else "active"),
-        ("Step 2", "Preprocess", "done" if processed else ("active" if uploaded else "")),
-        ("Step 3", "OCR + extract", "done" if has_fields else ""),
-        ("Step 4", "Validate", "done" if has_fields else ""),
-        ("Step 5", "Human review", "active" if has_fields else ""),
-    ]
-    boxes = "".join(
-        f'<div class="step {state}"><b>{html.escape(a)}</b>{html.escape(b)}</div>'
-        for a, b, state in steps
-    )
-    st.markdown(f'<div class="steps">{boxes}</div>', unsafe_allow_html=True)
-
-
 if not uploaded_files:
-    render_stepper(uploaded=False, processed=False)
     st.info("👆 Upload a document to get started.")
     st.stop()
 
@@ -226,9 +308,7 @@ for idx, uf in enumerate(uploaded_files):
             manual_rotation=manual_rotation,
         )
         elapsed = time.perf_counter() - t0
-        document_id = st.session_state.document_ids.setdefault(
-            prepared.sha256, str(uuid.uuid4())
-        )
+        document_id = st.session_state.document_ids.setdefault(prepared.sha256, str(uuid.uuid4()))
         st.session_state.review_runs[cache_key] = {
             "document_id": document_id,
             "review_run_id": str(uuid.uuid4()),
@@ -242,7 +322,6 @@ for idx, uf in enumerate(uploaded_files):
     except Exception as exc:  # unexpected: never crash the whole page
         rejected.append((uf.name, f"Unexpected error while processing ({exc})."))
 
-render_stepper(uploaded=True, processed=bool(results))
 
 if rejected:
     with st.expander(f"⛔ {len(rejected)} file(s) rejected", expanded=True):
@@ -264,13 +343,11 @@ for label, prepared, _ in results:
         duplicates[label] = original_label
 
 # Publish the hand-off for the OCR module (skip exact duplicates).
-st.session_state["ocr_payloads"] = [
-    prepared.ocr_payload() for label, prepared, _ in results if label not in duplicates
-]
+st.session_state["ocr_payloads"] = [prepared.ocr_payload() for label, prepared, _ in results if label not in duplicates]
 
 # Publish the first unique upload as the single-document review contract.
 # The dashboard reuses these bytes; it must not ask the user to upload again.
-primary = next(((l, p, k) for l, p, k in results if l not in duplicates), None)
+primary = next(((lbl, doc, k) for lbl, doc, k in results if lbl not in duplicates), None)
 if primary is not None:
     _, primary_document, primary_key = primary
     primary_run = st.session_state.review_runs[primary_key]
@@ -350,10 +427,10 @@ for position, (label, prepared, cache_key) in enumerate(results):
                     if len(pages) == 1:
                         stretch(st.image, pages[0])
                     else:
-                        for tab, img, no in zip(
+                        for tab, img in zip(
                             st.tabs([f"Page {n}" for n in range(1, len(pages) + 1)]),
                             pages,
-                            range(1, len(pages) + 1),
+                            strict=True,
                         ):
                             with tab:
                                 stretch(st.image, img)
@@ -404,8 +481,7 @@ for position, (label, prepared, cache_key) in enumerate(results):
         # ---- Hand-off ---------------------------------------------------
         with tab_handoff:
             payload = prepared.ocr_payload()
-            st.json({k: v for k, v in payload.items() if k != "content"}
-                    | {"content_bytes": len(payload["content"])})
+            st.json({k: v for k, v in payload.items() if k != "content"} | {"content_bytes": len(payload["content"])})
             if prepared.is_pdf:
                 st.download_button(
                     "⬇️ Download original PDF (as sent to OCR)",
@@ -424,51 +500,329 @@ for position, (label, prepared, cache_key) in enumerate(results):
                 )
 
 # ---------------------------------------------------------------------------
-# Extraction results (filled by Members 2 and 3 through the contract)
+# Extraction (Member 2) + validation and routing (Member 3)
 # ---------------------------------------------------------------------------
+import json  # noqa: E402
+
+from PIL import ImageDraw  # noqa: E402
+
+from extraction.inputs import load_document  # noqa: E402
+from pipeline import export_record, published_fields, review_rows, run_pipeline  # noqa: E402
+from review import render_review  # noqa: E402
+
+DECISION_STYLE = {
+    "auto_accepted": ("ok", "✅ Auto-accepted", "All checks passed with high confidence."),
+    "human_review": ("warn", "👀 Needs human review", "Some fields are uncertain. Check them below."),
+    "retry_extraction": ("bad", "🔁 Retry extraction", "Extraction looks unreliable; try again or fix the image."),
+    "rejected": ("bad", "⛔ Rejected", "The document failed critical checks."),
+}
+FIELD_ICON = {"auto_accept": "✅", "human_review": "👀", "retry_extraction": "🔁", "reject": "⛔", "info": "ℹ️"}
+
+
+@st.cache_resource(show_spinner="Loading models (first time only)...")
+def _warm_models(ocr_on: bool, vlm_on: bool, ocr_size: str) -> bool:
+    """Load PaddleOCR / Qwen2-VL once per server process so each document only pays for inference."""
+    from extraction import ai_extractor, ocr_engine
+
+    if ocr_on:
+        ocr_engine.get_engine()
+    if vlm_on:
+        ai_extractor.get_engine()
+    return True
+
+
+st.session_state.setdefault("pipeline_runs", {})
+st.session_state.setdefault("approved_records", {})
+
 st.divider()
-st.subheader("📋 Extracted and validated fields")
+st.markdown('<div class="section-title">🧠 Extraction & validation</div>', unsafe_allow_html=True)
+
+unique_docs = [(label, prepared, key) for label, prepared, key in results if label not in duplicates]
+options_key = f"ocr={use_ocr}:{ocr_speed}|vlm={use_vlm}|type={doc_type_override}"
+branches_on = use_ocr or use_vlm
+
+col_sel, col_run, col_all = st.columns([4, 1.3, 1.3])
+selected_label = col_sel.selectbox("Document", [label for label, _, _ in unique_docs], label_visibility="collapsed")
+sel_label, sel_doc, sel_key = next(d for d in unique_docs if d[0] == selected_label)
+run_key = f"{sel_key}|{options_key}"
+clicked_one = col_run.button("▶️ Run extraction", type="primary", disabled=not branches_on, width="stretch")
+clicked_all = col_all.button(
+    f"⏩ Run all ({len(unique_docs)})", disabled=not branches_on or len(unique_docs) < 2, width="stretch"
+)
+if not branches_on:
+    st.warning("Turn on at least one extraction branch in the sidebar.")
 
 
-def render_fields(fields: dict) -> None:
-    """Table for {name: {value, confidence, status}}; falls back to raw JSON."""
-    if all(isinstance(v, dict) and "value" in v for v in fields.values()):
-        rows = [
-            {
-                "Field": name,
-                "Value": "" if v.get("value") is None else str(v["value"]),
-                "Confidence": v.get("confidence"),
-                "Status": v.get("status", ""),
-            }
-            for name, v in fields.items()
-        ]
+def _run(label: str, prepared: PreparedDocument, key: str) -> None:
+    steps = " → ".join(s for s, on in (("PaddleOCR", use_ocr), ("Qwen2-VL", use_vlm), ("rules engine", True)) if on)
+    with st.status(f"Extracting **{label}**: {steps}", expanded=False) as status:
+        if use_vlm:
+            st.write("Qwen2-VL runs locally; on CPU this takes about 1-2 minutes.")
+        run = run_pipeline(prepared.ocr_payload(), use_ocr=use_ocr, use_vlm=use_vlm, document_type=doc_type_override)
+        st.session_state.pipeline_runs[f"{key}|{options_key}"] = run
+        status.update(label=f"{label}: {run.decision.replace('_', ' ')}", state="complete")
+
+
+if branches_on and (clicked_one or clicked_all or auto_run):
+    try:
+        _warm_models(use_ocr, use_vlm, os.environ["OCR_MODEL_SIZE"])
+    except Exception as exc:  # missing optional model packages: branch reports its own error
+        st.warning(f"Model preload failed ({type(exc).__name__}); the branch will report the error.")
+if clicked_one or (auto_run and branches_on and run_key not in st.session_state.pipeline_runs):
+    _run(sel_label, sel_doc, sel_key)
+if clicked_all:
+    for label, prepared, key in unique_docs:
+        if f"{key}|{options_key}" not in st.session_state.pipeline_runs:
+            _run(label, prepared, key)
+
+run = st.session_state.pipeline_runs.get(run_key)
+document_id = st.session_state.review_runs[sel_key]["document_id"]
+
+if run is None:
+    st.info("Choose the branches in the sidebar, then press **▶️ Run extraction**.")
+else:
+    rows = review_rows(run)
+    publish_extraction_result(document_id, published_fields(run))
+    rules = run.rules.to_dict()
+
+    # ---- Decision banner ---------------------------------------------------
+    # ---- Document type (classifier) -----------------------------------------
+    DOC_ICON = {"invoice": "🧾", "delivery_note": "🚚", "form": "📝"}
+    DOC_LABEL = {"invoice": "Receipt / Invoice", "delivery_note": "Delivery Note", "form": "Form"}
+
+    def _type_of(branch):
+        if branch is None or not branch.ok:
+            return None, None
+        f = branch.fields["document_type"]
+        return f.value, (f.confidence if f.value else None)
+
+    ocr_t, ocr_tc = _type_of(run.ocr)
+    vlm_t, vlm_tc = _type_of(run.vlm)
+    final_t = vlm_t or ocr_t  # same precedence as the hand-off to the rules engine
+    if doc_type_override:
+        source_note = "set manually in the sidebar"
+    elif ocr_t and vlm_t:
+        source_note = "OCR and VLM agree" if ocr_t == vlm_t else f"VLM says {vlm_t}, OCR says {ocr_t}"
+    elif final_t:
+        source_note = "from " + ("VLM" if vlm_t else "OCR") + " only"
+    else:
+        source_note = "neither branch could tell"
+    parts = [
+        f"OCR: <b>{html.escape(ocr_t or '—')}</b>" + (f" ({ocr_tc:.2f})" if ocr_tc else ""),
+        f"VLM: <b>{html.escape(vlm_t or '—')}</b>" + (f" ({vlm_tc:.2f})" if vlm_tc else ""),
+        f"rules engine checks it as <b>{html.escape(str(rules.get('document_type', 'generic')))}</b>",
+    ]
+    st.markdown(
+        f'<div class="doctype"><span class="doctype-main">{DOC_ICON.get(final_t or "", "❓")} '
+        f"{html.escape(DOC_LABEL.get(final_t or '', 'Unknown type'))}</span>"
+        f'<span class="doctype-note">{html.escape(source_note)}</span>'
+        f'<div class="doctype-detail">{" · ".join(parts)}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    css, title, blurb = DECISION_STYLE.get(run.decision, ("warn", run.decision, ""))
+    reasons = "".join(f"<li>{html.escape(str(r))}</li>" for r in rules.get("decision_reasons", [])[:4])
+    st.markdown(
+        f'<div class="decision {css}"><h3>{title}</h3><div>{blurb}</div><ul>{reasons}</ul></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- KPIs ----------------------------------------------------------------
+    found = [r for r in rows if r["value"] is not None]
+    review_needed = [r for r in rows if r["decision"] not in ("auto_accept", "info")]
+    comparable = [r for r in rows if r["agreement"] in ("match", "mismatch")]
+    agree = sum(r["agreement"] == "match" for r in comparable)
+    confs = [r["confidence"] for r in found if isinstance(r["confidence"], int | float)]
+    k = st.columns(5)
+    k[0].metric("Fields found", f"{len(found)}/{len(rows)}")
+    k[1].metric("Need review", len(review_needed))
+    k[2].metric("OCR ↔ VLM agreement", f"{agree}/{len(comparable)}" if comparable else "n/a")
+    k[3].metric("Avg confidence", f"{sum(confs) / len(confs):.2f}" if confs else "n/a")
+    k[4].metric("Time", " + ".join(f"{name} {secs:.0f}s" for name, secs in run.timings.items() if secs >= 0.5) or "<1s")
+
+    for branch in (run.ocr, run.vlm):
+        if branch is not None and branch.errors:
+            st.error(
+                f"**{branch.source.upper()}** failed: " + "; ".join(f"{e.code} ({e.message})" for e in branch.errors)
+            )
+
+    tab_fields, tab_compare, tab_evidence, tab_checks, tab_json = st.tabs(
+        ["📋 Fields", "⚖️ OCR vs VLM", "🖼️ Evidence", "✅ Checks", "🧾 Raw JSON"]
+    )
+
+    # ---- Fields --------------------------------------------------------------
+    with tab_fields:
+        df = pd.DataFrame(
+            [
+                {
+                    "": FIELD_ICON.get(r["decision"], "•"),
+                    "Field": r["field"],
+                    "Value": "" if r["value"] is None else str(r["value"]),
+                    "Confidence": r["confidence"],
+                    "Validation": r["validation"],
+                    "Agreement": r["agreement"],
+                    "Decision": r["decision"].replace("_", " "),
+                    "Why": r["reasons"],
+                }
+                for r in rows
+            ]
+        )
         stretch(
             st.dataframe,
-            pd.DataFrame(rows),
+            df,
             hide_index=True,
             column_config={
                 "Confidence": st.column_config.ProgressColumn(
                     "Confidence", min_value=0.0, max_value=1.0, format="%.2f"
-                )
+                ),
+                "Why": st.column_config.TextColumn("Why", width="large"),
             },
         )
-    else:
-        st.json(fields)
+        low = [r["field"] for r in found if isinstance(r["confidence"], int | float) and r["confidence"] < min_conf]
+        if low:
+            st.caption(f"⚠️ Below {min_conf:.2f} confidence: {', '.join(low)}")
 
+    # ---- OCR vs VLM ----------------------------------------------------------
+    with tab_compare:
+        st.caption("Values exactly as printed on the document, with each branch's own confidence.")
+        cmp = pd.DataFrame(
+            [
+                {
+                    "Field": r["field"],
+                    "PaddleOCR": r["ocr_value"] or "",
+                    "OCR conf": r["ocr_conf"],
+                    "Qwen2-VL": r["vlm_value"] or "",
+                    "VLM conf": r["vlm_conf"],
+                    "Agreement": {"match": "🟢 match", "mismatch": "🔴 mismatch"}.get(
+                        r["agreement"], "⚪ " + r["agreement"]
+                    ),
+                }
+                for r in rows
+            ]
+        )
+        stretch(
+            st.dataframe,
+            cmp,
+            hide_index=True,
+            column_config={
+                "OCR conf": st.column_config.ProgressColumn("OCR conf", min_value=0.0, max_value=1.0, format="%.2f"),
+                "VLM conf": st.column_config.ProgressColumn("VLM conf", min_value=0.0, max_value=1.0, format="%.2f"),
+            },
+        )
+        st.caption(
+            "OCR confidence = recognition score × label × position (heuristic). "
+            "VLM confidence = the model's token probabilities for that value. Neither is a calibrated accuracy."
+        )
 
-if has_fields:
-    render_fields(extraction_result["fields"])
-else:
-    st.info(
-        "Waiting for the OCR and validation module. It should call "
-        "`publish_extraction_result(document_id, validated_fields)` when ready."
+    # ---- Evidence ------------------------------------------------------------
+    with tab_evidence:
+        col_img, col_txt = st.columns([3, 2])
+        with col_img:
+            try:
+                page_img = load_document(sel_doc.ocr_payload()).pages[0]
+            except Exception as exc:
+                page_img = None
+                st.warning(f"Could not render the page ({exc}).")
+            if page_img is not None:
+                if show_boxes and run.ocr is not None and run.ocr.ok:
+                    page_img = page_img.convert("RGB").copy()
+                    draw = ImageDraw.Draw(page_img)
+                    for name, f in run.ocr.fields.items():
+                        if f.value is None or not f.evidence or not f.evidence.bbox:
+                            continue
+                        x0, y0, x1, y1 = f.evidence.bbox
+                        if y0 > page_img.height:
+                            continue  # box is on a later PDF page
+                        color = (22, 163, 74) if f.confidence >= min_conf else (245, 158, 11)
+                        draw.rectangle([x0 - 2, y0 - 2, x1 + 2, y1 + 2], outline=color, width=3)
+                        draw.text((x0, max(0, y0 - 13)), name, fill=color)
+                stretch(st.image, page_img)
+                st.markdown(
+                    '<div class="legend"><span>🟩 confident</span><span>🟧 below threshold</span></div>',
+                    unsafe_allow_html=True,
+                )
+        with col_txt:
+            st.markdown("**Warnings**")
+            warns = [w for b in (run.ocr, run.vlm) if b is not None for w in b.warnings]
+            if warns:
+                st.markdown("".join(chip(w, "warn") for w in dict.fromkeys(warns)), unsafe_allow_html=True)
+            else:
+                st.caption("None")
+            if run.ocr is not None and run.ocr.raw_text:
+                with st.expander("Full OCR text", expanded=False):
+                    st.code(run.ocr.raw_text, language=None)
+
+    # ---- Checks --------------------------------------------------------------
+    with tab_checks:
+        checks = rules.get("cross_field_checks") or []
+        if checks:
+            stretch(
+                st.dataframe,
+                pd.DataFrame(
+                    [
+                        {
+                            "Check": c.get("check_name"),
+                            "Status": str(c.get("status")),
+                            "Expected": c.get("expected_value"),
+                            "Actual": c.get("actual_value"),
+                            "Difference": c.get("difference"),
+                            "Reason": "; ".join(c.get("reasons") or []),
+                        }
+                        for c in checks
+                    ]
+                ),
+                hide_index=True,
+            )
+        else:
+            st.caption("No cross-field checks were run.")
+        crit = rules.get("critical_failures") or []
+        if crit:
+            st.error("Critical: " + ", ".join(map(str, crit)))
+        else:
+            st.success("No critical failures.")
+
+    # ---- Raw JSON ------------------------------------------------------------
+    with tab_json:
+        raw = {
+            "ocr": run.ocr.to_json_dict() if run.ocr else None,
+            "vlm": run.vlm.to_json_dict() if run.vlm else None,
+            "rules_engine": rules,
+        }
+        c1, c2 = st.columns(2)
+        c1.download_button(
+            "⬇️ Full results (JSON)",
+            json.dumps(raw, indent=2, default=str),
+            f"{document_id}_results.json",
+            "application/json",
+            width="stretch",
+        )
+        c2.download_button(
+            "⬇️ Final record (JSON)",
+            json.dumps(export_record(run), indent=2, default=str),
+            f"{document_id}_record.json",
+            "application/json",
+            width="stretch",
+        )
+        st.json(raw, expanded=False)
+
+    # -----------------------------------------------------------------------
+    # Human review (Member 4): edit, re-validate, approve, save and export
+    # -----------------------------------------------------------------------
+    st.divider()
+    st.markdown('<div class="section-title">👁️ Human review</div>', unsafe_allow_html=True)
+    render_review(
+        run.rules,
+        document_bytes=sel_doc.original_bytes,
+        document_type=(
+            "application/pdf"
+            if sel_doc.is_pdf
+            else ("image/jpeg" if sel_doc.extension in {".jpg", ".jpeg"} else "image/png")
+        ),
+        document_id=document_id,
+        review_run_id=st.session_state.review_runs[sel_key]["review_run_id"],
+        authorized_export=True,
+        show_header=False,
     )
-
-st.subheader("👁️ Human review dashboard")
-if has_fields:
-    st.success("Validated extraction is ready for review.")
-else:
-    st.caption("The review dashboard opens here after extraction and validation.")
 
 # ---------------------------------------------------------------------------
 # Integration contract (for teammates)

@@ -1,4 +1,5 @@
 # HCLTech-Hackathon
+System Builders Team (AI Engineer)
 
 ## Case 3 — Messy Document Extraction with Human Review
 
@@ -88,3 +89,10 @@ The Streamlit app displays metadata, quality warnings, original/prepared image
 previews, and a direct-PDF download for OCR hand-off. Extraction results,
 validation, confidence scoring, and the human-review queue remain integration
 surfaces for the other team members.
+
+## Member 2 — OCR & VLM extraction
+
+`extraction/`: PaddleOCR and a local Qwen2-VL-2B, both producing one shared JSON output format. Everything runs locally.
+See [docs/MEMBER2_EXTRACTION.md](docs/MEMBER2_EXTRACTION.md) for the interface, data lifecycle, privacy and setup.
+
+Quick start: `python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && pytest`

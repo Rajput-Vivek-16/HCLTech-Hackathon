@@ -10,12 +10,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.7",
-    "anthropic>=2.0",
     "numpy>=1.24",
     "opencv-python-headless>=4.8",
     "pandas>=2.0",
     "pillow>=10.4",
-    "pymupdf>=1.23",
+    "pymupdf>=1.23",  # render PDF pages (Member 1 passes PDFs through unchanged)
     "python-dotenv>=1.0",
     "streamlit>=1.50",
 ]
@@ -23,6 +22,9 @@ dependencies = [
 [project.optional-dependencies]
 # Heavy: only for running real OCR locally (not installed in CI).
 ocr = ["paddleocr>=3.0", "paddlepaddle>=3.0"]
+# Heavy: local Qwen2-VL. For CPU-only torch first run:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+vlm = ["torch>=2.4", "torchvision>=0.19", "transformers>=4.45,<5", "accelerate>=0.33"]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
@@ -34,7 +36,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["extraction*", "evaluation*", "rules_engine*"]
+include = ["extraction*", "rules_engine*"]
 
 [tool.setuptools]
 py-modules = [
@@ -42,6 +44,7 @@ py-modules = [
     "exporter",
     "generate_sample_bills",
     "app",
+    "pipeline",
     "preprocess",
     "review",
     "review_demo",
@@ -57,13 +60,16 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "S"]
 
+[tool.ruff.format]
+exclude = ["*.md"]  # don't reformat code snippets inside documentation
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S106"]
 "test_*.py" = ["S101", "S106"]
 
 [tool.mypy]
 python_version = "3.10"
-packages = ["extraction", "evaluation"]
+packages = ["extraction"]
 plugins = ["pydantic.mypy"]
 warn_unused_ignores = true
 warn_return_any = true
@@ -72,7 +78,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "rules_engine/tests", "test_preprocess.py"]
-addopts = "--cov=extraction --cov=evaluation --cov-report=term-missing"
+addopts = "--cov=extraction --cov-report=term-missing"
 markers = ["integration: needs real PaddleOCR installed (skipped otherwise)"]
 
 [tool.coverage.run]
